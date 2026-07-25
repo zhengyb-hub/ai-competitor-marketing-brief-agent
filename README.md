@@ -3,6 +3,10 @@
 A portfolio-ready Streamlit application that converts structured competitor
 observations into an evidence-grounded marketing brief.
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-competitor-marketing-brief-agent-j8cvm6j4nurwpf6bkhzzgw.streamlit.app/)
+
+**Live demo:** https://ai-competitor-marketing-brief-agent-j8cvm6j4nurwpf6bkhzzgw.streamlit.app/
+
 The project demonstrates the intersection of AI marketing, competitor
 intelligence, marketing analytics, prompt design, and product thinking. It uses
 the OpenAI Responses API for AI-powered analysis and includes a transparent
