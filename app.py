@@ -22,13 +22,24 @@ st.set_page_config(
 
 APP_DIR = Path(__file__).resolve().parent
 DATA_PATH = APP_DIR / "data" / "sample_competitor_data.csv"
+COLLECTED_DATA_PATH = APP_DIR / "data" / "collected_competitor_data.csv"
 DEFAULT_MODEL = "gpt-5.6"
 
 
 @st.cache_data
 def load_data(file_path: Path) -> pd.DataFrame:
-    """Read the bundled portfolio sample."""
+    """Read a bundled or automatically collected CSV dataset."""
     return pd.read_csv(file_path)
+
+
+def choose_default_data_path() -> tuple[Path, str]:
+    """Prefer collected evidence while retaining the sample as a safe fallback."""
+    if COLLECTED_DATA_PATH.exists() and COLLECTED_DATA_PATH.stat().st_size:
+        return (
+            COLLECTED_DATA_PATH,
+            "Automatically collected Apple App Store evidence",
+        )
+    return DATA_PATH, "Bundled sample portfolio dataset"
 
 
 def get_runtime_setting(name: str, default: str = "") -> str:
@@ -276,6 +287,10 @@ def build_marketing_brief_sections(
     date_min = filtered_data["date"].min() if total_records else "N/A"
     date_max = filtered_data["date"].max() if total_records else "N/A"
     category_list = ", ".join(category_counts.index.tolist()) or "N/A"
+    uses_sample_data = bool(
+        total_records
+        and filtered_data["source"].eq("Sample Portfolio Data").all()
+    )
 
     competitor_overview = []
     for competitor in selected_competitors:
@@ -322,14 +337,19 @@ def build_marketing_brief_sections(
             f"围绕 {brand_name} 提炼一句清晰的差异化品牌主张。",
             f"优先关注 {top_category}，因为它是所选数据里最突出的竞争主题。",
             "把产品功能转化为用户能理解的营销卖点，而不只是功能描述。",
-            "持续向 CSV 中添加新样本，让这个分析流程变成可复用的竞品研究工具。",
+            "持续检查自动采集的版本更新、商店定位和评分变化，形成趋势记录。",
         ]
 
         limitations = [
-            "本分析只使用作品集模拟数据，不能当作真实官方市场数据。",
             "报告由简单规则生成，没有调用真实 AI 模型或外部 API。",
-            "项目只分析本地 CSV 文件，不追踪实时竞品活动。",
+            "自动数据来自 Apple App Store 公开页面，不代表全部市场、渠道或用户反馈。",
+            "采集任务按日运行，属于定期快照而非实时监控。",
         ]
+        if uses_sample_data:
+            limitations.insert(
+                0,
+                "本分析使用作品集模拟数据，不能当作真实官方市场数据。",
+            )
 
         if total_records < 8:
             limitations.append("所选数据量较小，因此结论更适合作为方向性参考。")
@@ -338,7 +358,8 @@ def build_marketing_brief_sections(
 
         sections = {
             "Executive Summary": (
-                f"本报告分析 **{industry}** 领域中 {len(selected_competitors)} 个竞品的本地 CSV 样本数据。"
+                f"本报告分析 **{industry}** 领域中 {len(selected_competitors)} 个竞品的"
+                f"{'作品集样本' if uses_sample_data else '自动采集公开证据'}。"
                 f"当前共分析 **{total_records}** 条记录，数据时间范围为 **{date_min} 至 {date_max}**。"
                 f"样本中最突出的主题是 **{top_category}**。对 **{brand_name}** 来说，"
                 "这些信号可以帮助团队优化品牌定位、内容策略和营销沟通重点。"
@@ -392,14 +413,19 @@ def build_marketing_brief_sections(
             f"Clarify one differentiated brand promise for {brand_name}.",
             f"Prioritize {top_category}, because it is the most visible competitive theme in the selected data.",
             "Translate product features into user-facing marketing benefits, not only feature descriptions.",
-            "Keep adding rows to the CSV so this workflow becomes a reusable competitor research system.",
+            "Monitor collected release notes, store positioning, and rating changes to build a trend history.",
         ]
 
         limitations = [
-            "This analysis uses sample portfolio data only and should not be treated as official market data.",
             "The brief is generated with simple rule-based logic, not a real AI model or external API.",
-            "The project only analyzes the local CSV file and does not track live competitor activity.",
+            "Automatic evidence is limited to public Apple App Store data and does not represent every market, channel, or user.",
+            "Collection runs daily, so this is scheduled monitoring rather than real-time tracking.",
         ]
+        if uses_sample_data:
+            limitations.insert(
+                0,
+                "This analysis uses sample portfolio data and should not be treated as official market data.",
+            )
 
         if total_records < 8:
             limitations.append(
@@ -412,7 +438,9 @@ def build_marketing_brief_sections(
 
         sections = {
             "Executive Summary": (
-                f"This report analyzes local CSV sample data for {len(selected_competitors)} competitor(s) "
+                f"This report analyzes "
+                f"{'portfolio sample data' if uses_sample_data else 'automatically collected public evidence'} "
+                f"for {len(selected_competitors)} competitor(s) "
                 f"in the **{industry}** space. It reviews **{total_records}** records from "
                 f"**{date_min} to {date_max}** and identifies **{top_category}** as the strongest theme. "
                 f"For **{brand_name}**, these signals can support sharper positioning, clearer content priorities, "
@@ -492,8 +520,13 @@ uploaded_file = st.sidebar.file_uploader(
     ),
 )
 
+default_data_path, default_data_label = choose_default_data_path()
 try:
-    raw_df = pd.read_csv(uploaded_file) if uploaded_file is not None else load_data(DATA_PATH)
+    raw_df = (
+        pd.read_csv(uploaded_file)
+        if uploaded_file is not None
+        else load_data(default_data_path)
+    )
     df = validate_competitor_data(raw_df)
 except (FileNotFoundError, pd.errors.ParserError, UnicodeDecodeError, ValueError) as exc:
     st.error(f"Unable to load competitor data: {exc}")
@@ -502,8 +535,12 @@ except (FileNotFoundError, pd.errors.ParserError, UnicodeDecodeError, ValueError
 data_source_label = (
     f"Uploaded file: {uploaded_file.name}"
     if uploaded_file is not None
-    else "Bundled sample portfolio dataset"
+    else default_data_label
 )
+if uploaded_file is None and "collected_at" in df.columns:
+    latest_collection = df["collected_at"].replace("", pd.NA).dropna().max()
+    if pd.notna(latest_collection):
+        data_source_label += f" · updated {latest_collection}"
 st.sidebar.caption(data_source_label)
 
 brand_name = st.sidebar.text_input("Brand Name", value="Sohu News")
@@ -574,8 +611,8 @@ st.markdown(
         <div class="hero-title">AI-Powered Competitor Marketing Brief Agent</div>
         <div class="hero-subtitle">From structured evidence to decision-ready marketing strategy.</div>
         <div class="hero-copy">
-            Upload competitor observations, explore activity patterns, and generate a grounded
-            marketing brief with the OpenAI Responses API or a transparent rule-based fallback.
+            Monitor configured competitors from public App Store data, upload additional CSV
+            evidence, and generate a grounded marketing brief with a transparent rule-based workflow.
         </div>
     </div>
     """,
@@ -673,6 +710,11 @@ with overview_tab:
         """,
         unsafe_allow_html=True,
     )
+    if uploaded_file is None and default_data_path == COLLECTED_DATA_PATH:
+        st.success(
+            "Automatic collection is active · Public Apple App Store evidence · "
+            "Daily refresh via GitHub Actions · No AI or API key required."
+        )
 
     step_col_1, step_col_2, step_col_3 = st.columns(3)
 
@@ -681,8 +723,8 @@ with overview_tab:
             """
             <div class="step-card">
                 <div class="step-number">1</div>
-                <div class="step-title">Load evidence</div>
-                <div class="step-copy">Use the sample dataset or upload a CSV with your own competitor observations.</div>
+                <div class="step-title">Collect evidence</div>
+                <div class="step-copy">Use the daily public App Store snapshot or upload your own CSV evidence.</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -766,14 +808,44 @@ with data_tab:
                 st.dataframe(category_count_data, width="stretch", hide_index=True)
 
         with st.expander("Filtered data preview", expanded=False):
+            preview_columns = REQUIRED_COLUMNS + [
+                column
+                for column in ["source_url", "collected_at"]
+                if column in filtered_df.columns
+            ]
             st.dataframe(
-                filtered_df[REQUIRED_COLUMNS],
+                filtered_df[preview_columns],
                 width="stretch",
                 hide_index=True,
+                column_config={
+                    "source_url": st.column_config.LinkColumn(
+                        "Source link",
+                        display_text="Open source",
+                    )
+                }
+                if "source_url" in preview_columns
+                else None,
             )
 
     with st.expander("Full source data", expanded=False):
-        st.dataframe(df[REQUIRED_COLUMNS], width="stretch", hide_index=True)
+        source_columns = REQUIRED_COLUMNS + [
+            column
+            for column in ["source_url", "collected_at"]
+            if column in df.columns
+        ]
+        st.dataframe(
+            df[source_columns],
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "source_url": st.column_config.LinkColumn(
+                    "Source link",
+                    display_text="Open source",
+                )
+            }
+            if "source_url" in source_columns
+            else None,
+        )
 
 
 with brief_tab:

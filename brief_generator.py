@@ -21,6 +21,12 @@ REQUIRED_COLUMNS = [
     "category",
 ]
 
+OPTIONAL_COLUMNS = [
+    "source_url",
+    "collected_at",
+    "item_id",
+]
+
 REPORT_SECTIONS = [
     "Executive Summary",
     "Competitor Activity Overview",
@@ -42,8 +48,11 @@ def validate_competitor_data(data: pd.DataFrame) -> pd.DataFrame:
             "CSV is missing required columns: " + ", ".join(missing_columns)
         )
 
-    normalized = data[REQUIRED_COLUMNS].copy()
-    for column in REQUIRED_COLUMNS:
+    selected_columns = REQUIRED_COLUMNS + [
+        column for column in OPTIONAL_COLUMNS if column in data.columns
+    ]
+    normalized = data[selected_columns].copy()
+    for column in selected_columns:
         normalized[column] = normalized[column].fillna("").astype(str).str.strip()
 
     normalized = normalized[

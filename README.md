@@ -1,16 +1,16 @@
 # AI-Powered Competitor Marketing Brief Agent
 
-A portfolio-ready Streamlit application that converts structured competitor
-observations into an evidence-grounded marketing brief.
+A portfolio-ready Streamlit application that automatically collects public
+competitor app evidence and converts it into an evidence-grounded marketing brief.
 
 [![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://ai-competitor-marketing-brief-agent-j8cvm6j4nurwpf6bkhzzgw.streamlit.app/)
 
 **Live demo:** https://ai-competitor-marketing-brief-agent-j8cvm6j4nurwpf6bkhzzgw.streamlit.app/
 
-The project demonstrates the intersection of AI marketing, competitor
-intelligence, marketing analytics, prompt design, and product thinking. It uses
-the OpenAI Responses API for AI-powered analysis and includes a transparent
-rule-based fallback so the public demo remains usable without an API key.
+The project demonstrates the intersection of marketing intelligence, automation,
+analytics, prompt design, and product thinking. A scheduled collector records
+public Apple App Store release notes, positioning copy, ratings, and source URLs.
+The public app uses a transparent rule-based workflow and does not require real AI.
 
 The recommended public portfolio deployment runs in **Rule-based portfolio
 demo** mode without any API key. This keeps the app free to operate, prevents
@@ -20,14 +20,16 @@ architecture and testing example.
 
 ## What the app does
 
-1. Loads the bundled sample dataset or a user-uploaded CSV.
-2. Validates the schema, required values, and dates.
-3. Filters observations by competitor and marketing category.
-4. Visualizes competitor activity and category coverage.
-5. Generates a structured brief with either:
+1. Collects configured competitors from Apple's public, keyless lookup API.
+2. Deduplicates observations and keeps a bounded history in CSV.
+3. Refreshes the repository every day through GitHub Actions.
+4. Loads the latest collected evidence, with sample/uploaded CSV fallbacks.
+5. Validates and filters observations by competitor and marketing category.
+6. Visualizes competitor activity and category coverage.
+7. Generates a structured brief with either:
    - OpenAI-powered evidence synthesis; or
    - a deterministic rule-based fallback.
-6. Exports the report as Markdown and JSON, plus the exact filtered evidence as
+8. Exports the report as Markdown and JSON, plus the exact filtered evidence as
    CSV.
 
 ## Why this is an AI Marketing project
@@ -39,6 +41,8 @@ turning those notes into a concise, decision-useful narrative.
 This application productizes that workflow:
 
 - structured evidence intake;
+- automated, keyless public-data collection;
+- source URLs and collection timestamps;
 - data-quality checks;
 - exploratory marketing analytics;
 - grounded AI synthesis;
@@ -65,6 +69,9 @@ seven-section report contract.
 - Python
 - Streamlit
 - pandas
+- Requests
+- Apple iTunes Search API
+- GitHub Actions
 - OpenAI Python SDK
 - OpenAI Responses API
 - `unittest`
@@ -78,11 +85,19 @@ The default text-generation model is `gpt-5.6`. It can be changed with the
 .
 |-- app.py
 |-- brief_generator.py
+|-- collector.py
+|-- config/
+|   `-- competitors.json
 |-- requirements.txt
 |-- data/
-|   `-- sample_competitor_data.csv
+|   |-- sample_competitor_data.csv
+|   `-- collected_competitor_data.csv
 |-- tests/
-|   `-- test_brief_generator.py
+|   |-- test_brief_generator.py
+|   `-- test_collector.py
+|-- .github/
+|   `-- workflows/
+|       `-- collect-competitor-data.yml
 |-- .streamlit/
 |   |-- config.toml
 |   `-- secrets.example.toml
@@ -103,8 +118,48 @@ The app accepts UTF-8 CSV files up to 10 MB with these columns:
 | `content` | Factual observation or research note | `Toutiao uses short video...` |
 | `category` | Marketing analysis category | `Content Strategy` |
 
-The included dataset is synthetic portfolio data. It must not be represented as
-official market data.
+Automatically collected rows can also include:
+
+| Column | Meaning |
+|---|---|
+| `source_url` | Exact public App Store evidence link |
+| `collected_at` | Date the collector observed the record |
+| `item_id` | Stable deduplication identifier |
+
+The sample fallback is synthetic portfolio data and must not be represented as
+official market data. The collected dataset is a dated public-source snapshot,
+not a complete market dataset.
+
+## Configure automatic collection
+
+Edit `config/competitors.json` to change the monitored apps:
+
+```json
+{
+  "country": "cn",
+  "max_records_per_competitor": 60,
+  "competitors": [
+    {
+      "name": "Tencent News",
+      "track_id": 399363156
+    }
+  ]
+}
+```
+
+`track_id` is the numeric ID at the end of an Apple App Store URL. Run a manual
+collection with:
+
+```powershell
+python collector.py `
+  --config config/competitors.json `
+  --output data/collected_competitor_data.csv
+```
+
+The included GitHub Actions workflow runs at 09:15 China Standard Time every
+day and can also be started manually from the repository's **Actions** tab. It
+commits only when the collected evidence changes; Streamlit Community Cloud
+then redeploys the updated repository automatically.
 
 ## Run locally
 
@@ -182,7 +237,7 @@ Use this 60-second flow in interviews:
 
 1. Explain the business problem: competitor notes are fragmented and slow to
    synthesize.
-2. Upload or select the sample evidence.
+2. Show that the current evidence was collected automatically and retains links.
 3. Filter two or more competitors and relevant categories.
 4. Show the activity and category charts.
 5. Generate the AI brief.
@@ -191,8 +246,11 @@ Use this 60-second flow in interviews:
 
 ## Current limitations
 
-- The bundled dataset is synthetic portfolio data.
-- Uploaded rows are structured observations; the app does not scrape websites.
+- Automatic collection currently covers Apple App Store product evidence only.
+- App Store ratings are snapshots and may vary by storefront and version.
+- The collector runs daily rather than in real time.
+- News sites, social media, Android stores, campaigns, and paid media are not yet
+  connected.
 - Model output quality depends on source quality and evidence coverage.
 - The app does not persist datasets or reports in a database.
 - A human should review recommendations before business use.
@@ -201,6 +259,8 @@ Use this 60-second flow in interviews:
 ## Responsible-use choices
 
 - Evidence is sent only when the user selects AI-powered generation.
+- The collector uses a public API, does not bypass login controls, and stores
+  source links for review.
 - Input is capped before it is included in the model prompt.
 - The prompt prohibits invented facts and metrics.
 - The exact filtered evidence can be exported for review.
@@ -209,7 +269,7 @@ Use this 60-second flow in interviews:
 
 ## Next improvements
 
-- Add approved RSS or public API ingestion with source URLs.
+- Add additional approved APIs for news, social, and Android app signals.
 - Add date-range filtering and trend comparisons.
 - Add PDF and presentation exports.
 - Store past briefs for change detection.
